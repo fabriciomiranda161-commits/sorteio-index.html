@@ -88,6 +88,14 @@
       font-size: 16px;
     }
 
+    .version {
+      display: inline-flex;
+      margin-top: 10px;
+      color: rgba(255, 246, 232, .54);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
     .mark {
       width: 62px;
       height: 62px;
@@ -523,6 +531,7 @@
         <div class="brand">Studio Queens</div>
         <h1>Sorteio de Clientes</h1>
         <p class="subtitle" id="subtitle">Carregando sorteio...</p>
+        <span class="version" id="versao">Página v3</span>
       </div>
       <div class="mark">SQ</div>
     </header>
@@ -915,6 +924,7 @@
       await jsonp({
         acao: "registrarResultadoSorteio",
         s: codigo,
+        premio: numeroPremio(cliente && cliente.premioNumero || premioAtual),
         vencedora: JSON.stringify(cliente)
       });
     }
@@ -1005,6 +1015,7 @@
         }
 
         aplicarSorteio(resposta.sorteio);
+        $("versao").textContent = "Página v3" + (resposta.versao ? " + Google " + resposta.versao : "");
       } catch (e) {
         mostrarErro(e.message || "Falha ao conectar com o Google.");
       }
