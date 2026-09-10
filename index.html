@@ -182,6 +182,36 @@
       margin-bottom: 18px;
     }
 
+    .prizeTabs {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin: -4px 0 20px;
+    }
+
+    .prizeTab {
+      min-height: 34px;
+      border: 1px solid rgba(241, 208, 140, .34);
+      border-radius: 999px;
+      padding: 7px 13px;
+      background: rgba(255, 250, 242, .08);
+      color: #f6e3bd;
+      cursor: pointer;
+      font-weight: 900;
+      font-size: 13px;
+    }
+
+    .prizeTab.active {
+      background: linear-gradient(135deg, #f1d08c, #bd8840);
+      color: #171014;
+      border-color: transparent;
+    }
+
+    .prizeTab.done {
+      box-shadow: inset 0 0 0 1px rgba(18, 140, 85, .70);
+    }
+
     .countdown {
       width: 104px;
       height: 104px;
@@ -515,6 +545,7 @@
     <section class="draw">
       <div class="drawInner">
         <div class="drawLabel">Sorteio Studio Queens</div>
+        <div class="prizeTabs" id="premios"></div>
         <div class="countdown" id="countdown">...</div>
         <div class="winner" id="winner">Buscando participantes.</div>
         <p class="hint" id="hint">Aguarde um instante.</p>
@@ -535,8 +566,11 @@
     const params = new URLSearchParams(location.search);
     const codigo = (params.get("s") || "").trim();
     const chaveResultadoLocal = codigo ? "studioQueensResultadoSorteio:" + codigo : "";
+    const chaveResultadosLocal = codigo ? "studioQueensResultadosSorteio:" + codigo : "";
     let participantes = [];
-    let resultado = null;
+    let resultados = [];
+    let premioAtual = 1;
+    let quantidadePremios = 1;
     let recebeuDadosDireto = false;
     let sorteioCarregado = false;
     let sorteioEmAndamento = false;
@@ -616,49 +650,118 @@
       throw ultimoErro || new Error("Falha ao conectar com o Google.");
     }
 
-    function salvarResultadoLocal(cliente) {
-      if (!chaveResultadoLocal || !cliente) return;
+    function numeroPremio(valor) {
+      const numero = Number(valor);
+      return numero > 0 ? numero : 1;
+    }
+
+    function resultadoDoPremio(numero) {
+      const alvo = numeroPremio(numero);
+      return resultados.find(item => numeroPremio(item && item.premioNumero) === alvo) || null;
+    }
+
+    function normalizarResultados(lista) {
+      const itens = Array.isArray(lista) ? lista : (lista ? [lista] : []);
+      const porPremio = new Map();
+
+      itens.forEach(item => {
+        if (!item || item.tipoResultado === "procedimento_invalido") return;
+        const premioNumero = numeroPremio(item.premioNumero);
+        porPremio.set(premioNumero, { ...item, premioNumero });
+      });
+
+      return [...porPremio.values()].sort((a, b) => numeroPremio(a.premioNumero) - numeroPremio(b.premioNumero));
+    }
+
+    function salvarResultadosLocal() {
+      if (!chaveResultadosLocal) return;
 
       try {
-        localStorage.setItem(chaveResultadoLocal, JSON.stringify(cliente));
+        localStorage.setItem(chaveResultadosLocal, JSON.stringify(resultados));
       } catch (e) {
       }
     }
 
-    function buscarResultadoLocal() {
-      if (!chaveResultadoLocal) return null;
+    function buscarResultadosLocal() {
+      if (!chaveResultadosLocal && !chaveResultadoLocal) return [];
 
       try {
-        return JSON.parse(localStorage.getItem(chaveResultadoLocal) || "null");
+        const novos = JSON.parse(localStorage.getItem(chaveResultadosLocal) || "[]");
+        if (Array.isArray(novos) && novos.length) return normalizarResultados(novos);
+
+        const antigo = JSON.parse(localStorage.getItem(chaveResultadoLocal) || "null");
+        return normalizarResultados(antigo);
       } catch (e) {
-        return null;
+        return [];
       }
     }
 
     function aplicarSorteio(sorteio) {
-      if (sorteioEmAndamento || resultado) return;
+      if (sorteioEmAndamento) return;
 
       participantes = Array.isArray(sorteio.participantes) ? sorteio.participantes : [];
-      resultado = buscarResultadoLocal() || sorteio.resultado || null;
+      quantidadePremios = Math.max(1, Number(sorteio.quantidadePremios || 1));
+      resultados = normalizarResultados([
+        ...normalizarResultados(sorteio.resultados || []),
+        ...normalizarResultados(sorteio.resultado || null),
+        ...buscarResultadosLocal()
+      ]);
       sorteioCarregado = true;
 
       $("subtitle").textContent = (sorteio.profissionais || []).join(", ") || "Clientes do mês";
       $("periodo").textContent = (sorteio.inicioBr || "") + " até " + (sorteio.fimBr || "");
       $("total").textContent = String(participantes.length);
       $("regra").textContent = sorteio.regra || "-";
+      renderizarPremios();
       renderizarLista();
+      atualizarTelaDoPremio();
+    }
 
-      if (resultado) {
-        mostrarVencedora(resultado, true);
-        destacarCardGanhadora(resultado);
+    function renderizarPremios() {
+      const container = $("premios");
+
+      if (quantidadePremios <= 1) {
+        container.innerHTML = "";
         return;
       }
 
-      $("winner").textContent = "Clique em sortear para escolher a ganhadora.";
+      container.innerHTML = Array.from({ length: quantidadePremios }, (_, indice) => {
+        const numero = indice + 1;
+        const classes = ["prizeTab"];
+        if (numero === premioAtual) classes.push("active");
+        if (resultadoDoPremio(numero)) classes.push("done");
+
+        return '<button class="' + classes.join(" ") + '" type="button" data-premio="' + numero + '">Prêmio ' + numero + '</button>';
+      }).join("");
+
+      container.querySelectorAll(".prizeTab").forEach(botao => {
+        botao.addEventListener("click", () => {
+          if (sorteioEmAndamento) return;
+          premioAtual = numeroPremio(botao.dataset.premio);
+          renderizarPremios();
+          atualizarTelaDoPremio();
+          renderizarLista();
+        });
+      });
+    }
+
+    function atualizarTelaDoPremio() {
+      const resultadoAtual = resultadoDoPremio(premioAtual);
+
+      if (resultadoAtual) {
+        mostrarVencedora(resultadoAtual, true);
+        return;
+      }
+
+      $("winner").className = "winner";
+      $("winner").textContent = quantidadePremios > 1
+        ? "Clique em sortear para escolher o Prêmio " + premioAtual + "."
+        : "Clique em sortear para escolher a ganhadora.";
       $("hint").textContent = "Os nomes vão girar antes do resultado final.";
       $("countdown").textContent = "Pronto";
       $("sortear").textContent = "Sortear";
-      $("sortear").disabled = !participantes.length;
+      $("sortear").disabled = !participantesDisponiveis().length;
+      destacarCardGanhadora(null);
     }
 
     function renderizarLista() {
@@ -685,7 +788,7 @@
           '</article>';
       }).join("");
 
-      if (resultado) destacarCardGanhadora(resultado);
+      destacarCardGanhadora(resultadoDoPremio(premioAtual));
     }
 
     function chaveCliente(cliente) {
@@ -694,7 +797,8 @@
         cliente && cliente.telefoneFinal || "",
         cliente && cliente.nome || "",
         cliente && cliente.dataApi || cliente && cliente.dataBr || "",
-        cliente && cliente.hora || ""
+        cliente && cliente.hora || "",
+        cliente && cliente.procedimento || ""
       ].join("|");
     }
 
@@ -721,7 +825,11 @@
     }
 
     function participantesDisponiveis() {
-      return participantes.filter(cliente => !chavesInvalidasSorteadas.has(chaveCliente(cliente)));
+      const chavesGanhadoras = new Set(resultados.map(chaveCliente));
+      return participantes.filter(cliente => {
+        const chave = chaveCliente(cliente);
+        return !chavesInvalidasSorteadas.has(chave) && !chavesGanhadoras.has(chave);
+      });
     }
 
     function mostrarSorteadaInvalida(cliente) {
@@ -749,6 +857,7 @@
 
       salvarResultado({
         ...cliente,
+        premioNumero: premioAtual,
         tipoResultado: "procedimento_invalido"
       }).catch(() => {
         $("hint").textContent = "Procedimento inválido. Não consegui registrar no Google, mas você pode sortear novamente.";
@@ -763,9 +872,17 @@
         };
       }
 
-      resultado = cliente;
       sorteioEmAndamento = false;
-      salvarResultadoLocal(cliente);
+      cliente = {
+        ...cliente,
+        premioNumero: numeroPremio(cliente.premioNumero || premioAtual)
+      };
+
+      resultados = normalizarResultados([
+        ...resultados.filter(item => numeroPremio(item.premioNumero) !== numeroPremio(cliente.premioNumero)),
+        cliente
+      ]);
+      salvarResultadosLocal();
       const posicao = posicaoCliente(cliente);
       $("winner").className = "winner final";
       $("winner").innerHTML = posicao
@@ -775,6 +892,7 @@
       $("countdown").textContent = "OK";
       $("sortear").textContent = "Sorteado";
       $("sortear").disabled = true;
+      renderizarPremios();
       destacarCardGanhadora(cliente);
     }
 
@@ -803,7 +921,7 @@
 
     function sortearCliente() {
       const disponiveis = participantesDisponiveis();
-      if (!disponiveis.length || resultado || sorteioEmAndamento) return;
+      if (!disponiveis.length || resultadoDoPremio(premioAtual) || sorteioEmAndamento) return;
 
       sorteioEmAndamento = true;
       $("sortear").disabled = true;
@@ -849,10 +967,17 @@
             return;
           }
 
-          mostrarVencedora(vencedora, false);
+          mostrarVencedora({
+            ...vencedora,
+            premioNumero: premioAtual
+          }, false);
           confete();
 
-          salvarResultado(vencedora).catch(() => {
+          salvarResultado({
+            ...vencedora,
+            premioNumero: premioAtual,
+            tipoResultado: "ganhadora"
+          }).catch(() => {
             $("hint").textContent = "A ganhadora apareceu, mas não consegui salvar no Google. Anote o nome antes de fechar.";
           });
         }
@@ -890,7 +1015,7 @@
 
       if (mensagem.tipo !== "studioQueensSorteio" || !mensagem.dados) return;
       if (codigo && mensagem.codigo && mensagem.codigo !== codigo) return;
-      if (sorteioCarregado || sorteioEmAndamento || resultado) return;
+      if (sorteioCarregado || sorteioEmAndamento) return;
 
       recebeuDadosDireto = true;
       aplicarSorteio(mensagem.dados);
