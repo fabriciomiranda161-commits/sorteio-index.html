@@ -286,16 +286,6 @@
       opacity: .78;
     }
 
-    .linkBtn {
-      background: linear-gradient(135deg, #15a66c, #087548);
-      color: #fff;
-      box-shadow: 0 14px 28px rgba(0, 0, 0, .22);
-    }
-
-    .linkBtn[hidden] {
-      display: none;
-    }
-
     .list {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -518,7 +508,6 @@
         <p class="hint" id="hint">Aguarde um instante.</p>
         <div class="actions">
           <button class="btn" id="sortear" type="button" disabled>Sortear</button>
-          <a class="linkBtn" id="whatsapp" href="#" target="_blank" rel="noopener" hidden>Chamar ganhadora</a>
         </div>
       </div>
     </section>
@@ -614,7 +603,6 @@
       participantes = Array.isArray(sorteio.participantes) ? sorteio.participantes : [];
       resultado = buscarResultadoLocal() || sorteio.resultado || null;
       sorteioCarregado = true;
-      $("whatsapp").hidden = true;
 
       $("subtitle").textContent = (sorteio.profissionais || []).join(", ") || "Clientes do mês";
       $("periodo").textContent = (sorteio.inicioBr || "") + " até " + (sorteio.fimBr || "");
@@ -662,11 +650,6 @@
       if (resultado) destacarCardGanhadora(resultado);
     }
 
-    function linkWhatsApp(cliente) {
-      const telefone = String(cliente && cliente.telefoneFinal || "").replace(/\D/g, "");
-      return telefone ? "https://wa.me/" + telefone : "#";
-    }
-
     function chaveCliente(cliente) {
       return [
         cliente && cliente.idCliente || "",
@@ -696,9 +679,6 @@
       if (!card) return;
 
       card.classList.add("winnerCard");
-      setTimeout(() => {
-        card.scrollIntoView({ behavior: "smooth", block: "center" });
-      }, 650);
     }
 
     function mostrarVencedora(cliente, jaSorteado) {
@@ -707,18 +687,14 @@
       salvarResultadoLocal(cliente);
       const posicao = posicaoCliente(cliente);
       $("winner").className = "winner final";
-      $("winner").innerHTML = "Ganhadora: " + esc(cliente.nome || "Sem nome") +
-        "<br><small>" + (posicao ? "Nº " + String(posicao).padStart(2, "0") + " da lista - " : "") + esc(cliente.profissional || "Studio Queens") + "</small>";
+      $("winner").innerHTML = posicao
+        ? "Nº " + String(posicao).padStart(2, "0") + "<br><small>Procure a cliente destacada na lista</small>"
+        : "Sorteio concluído<br><small>Procure a cliente destacada na lista</small>";
       $("hint").textContent = jaSorteado ? "Este sorteio já tinha uma ganhadora salva." : "Resultado salvo.";
       $("countdown").textContent = "OK";
       $("sortear").textContent = "Sorteado";
       $("sortear").disabled = true;
       destacarCardGanhadora(cliente);
-
-      if (cliente.telefoneFinal) {
-        $("whatsapp").href = linkWhatsApp(cliente);
-        $("whatsapp").hidden = false;
-      }
     }
 
     function confete() {
@@ -750,7 +726,6 @@
       sorteioEmAndamento = true;
       $("sortear").disabled = true;
       $("sortear").textContent = "Sorteando...";
-      $("whatsapp").hidden = true;
       $("hint").textContent = "Boa sorte!";
 
       let contador = 3;
