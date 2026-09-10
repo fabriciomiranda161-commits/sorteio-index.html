@@ -239,6 +239,11 @@
       background: linear-gradient(135deg, rgba(241, 208, 140, .14), rgba(255, 255, 255, .05));
     }
 
+    .winner.invalid {
+      border-color: rgba(241, 110, 110, .72);
+      background: linear-gradient(135deg, rgba(160, 45, 55, .22), rgba(255, 255, 255, .05));
+    }
+
     .hint {
       color: #d8c7b0;
       font-size: 14px;
@@ -309,6 +314,13 @@
     .client.winnerCard .badge {
       background: linear-gradient(135deg, #fff1be, #f1c15f);
       box-shadow: 0 0 0 5px rgba(241, 208, 140, .12);
+    }
+
+    .client.invalidWinnerCard {
+      border-color: rgba(241, 110, 110, .66);
+      background:
+        linear-gradient(135deg, rgba(160, 45, 55, .26), rgba(255, 250, 242, .07)),
+        rgba(255, 250, 242, .08);
     }
 
     .clientTop {
@@ -528,6 +540,7 @@
     let recebeuDadosDireto = false;
     let sorteioCarregado = false;
     let sorteioEmAndamento = false;
+    const chavesInvalidasSorteadas = new Set();
 
     const $ = id => document.getElementById(id);
 
@@ -669,8 +682,9 @@
     function destacarCardGanhadora(cliente) {
       const posicao = posicaoCliente(cliente);
 
-      document.querySelectorAll(".client.winnerCard").forEach(card => {
+      document.querySelectorAll(".client.winnerCard,.client.invalidWinnerCard").forEach(card => {
         card.classList.remove("winnerCard");
+        card.classList.remove("invalidWinnerCard");
       });
 
       if (!posicao) return;
@@ -679,6 +693,34 @@
       if (!card) return;
 
       card.classList.add("winnerCard");
+    }
+
+    function participantesDisponiveis() {
+      return participantes.filter(cliente => !chavesInvalidasSorteadas.has(chaveCliente(cliente)));
+    }
+
+    function mostrarSorteadaInvalida(cliente) {
+      sorteioEmAndamento = false;
+      chavesInvalidasSorteadas.add(chaveCliente(cliente));
+
+      const posicao = posicaoCliente(cliente);
+
+      document.querySelectorAll(".client.winnerCard,.client.invalidWinnerCard").forEach(card => {
+        card.classList.remove("winnerCard");
+        card.classList.remove("invalidWinnerCard");
+      });
+
+      const card = posicao ? document.querySelector('.client[data-posicao="' + posicao + '"]') : null;
+      if (card) card.classList.add("invalidWinnerCard");
+
+      $("winner").className = "winner invalid";
+      $("winner").innerHTML = posicao
+        ? "Nº " + String(posicao).padStart(2, "0") + "<br><small>Procedimento inválido. Sorteie novamente.</small>"
+        : "Procedimento inválido<br><small>Sorteie novamente.</small>";
+      $("hint").textContent = "Essa cliente não conta para a campanha.";
+      $("countdown").textContent = "OK";
+      $("sortear").textContent = participantesDisponiveis().length ? "Sortear novamente" : "Sem clientes válidas";
+      $("sortear").disabled = !participantesDisponiveis().length;
     }
 
     function mostrarVencedora(cliente, jaSorteado) {
@@ -721,7 +763,8 @@
     }
 
     function sortearCliente() {
-      if (!participantes.length || resultado || sorteioEmAndamento) return;
+      const disponiveis = participantesDisponiveis();
+      if (!disponiveis.length || resultado || sorteioEmAndamento) return;
 
       sorteioEmAndamento = true;
       $("sortear").disabled = true;
@@ -745,7 +788,8 @@
     }
 
     function girarNomes() {
-      const vencedora = participantes[Math.floor(Math.random() * participantes.length)];
+      const disponiveis = participantesDisponiveis();
+      const vencedora = disponiveis[Math.floor(Math.random() * disponiveis.length)];
       let passos = 0;
       const total = 36;
 
@@ -754,11 +798,18 @@
 
       const giro = setInterval(() => {
         passos++;
-        const atual = participantes[Math.floor(Math.random() * participantes.length)];
+        const listaGiro = participantesDisponiveis();
+        const atual = listaGiro[Math.floor(Math.random() * listaGiro.length)] || vencedora;
         $("winner").textContent = atual.nome || "Participante";
 
         if (passos >= total) {
           clearInterval(giro);
+
+          if (vencedora && vencedora.procedimentoInvalido) {
+            mostrarSorteadaInvalida(vencedora);
+            return;
+          }
+
           mostrarVencedora(vencedora, false);
           confete();
 
