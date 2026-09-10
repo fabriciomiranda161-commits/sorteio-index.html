@@ -424,6 +424,7 @@
     const codigo = (params.get("s") || "").trim();
     let participantes = [];
     let resultado = null;
+    let recebeuDadosDireto = false;
 
     const $ = id => document.getElementById(id);
 
@@ -472,6 +473,27 @@
       $("winner").textContent = texto;
       $("hint").textContent = "Gere um novo sorteio pelo robô se precisar.";
       $("lista").innerHTML = '<div class="state">' + esc(texto) + '</div>';
+    }
+
+    function aplicarSorteio(sorteio) {
+      participantes = Array.isArray(sorteio.participantes) ? sorteio.participantes : [];
+      resultado = sorteio.resultado || null;
+
+      $("subtitle").textContent = (sorteio.profissionais || []).join(", ") || "Clientes do mês";
+      $("periodo").textContent = (sorteio.inicioBr || "") + " até " + (sorteio.fimBr || "");
+      $("total").textContent = String(participantes.length);
+      $("regra").textContent = sorteio.regra || "-";
+      renderizarLista();
+
+      if (resultado) {
+        mostrarVencedora(resultado, true);
+        return;
+      }
+
+      $("winner").textContent = "Clique em sortear para escolher a ganhadora.";
+      $("hint").textContent = "Os nomes vão girar antes do resultado final.";
+      $("countdown").textContent = "Pronto";
+      $("sortear").disabled = !participantes.length;
     }
 
     function renderizarLista() {
@@ -589,12 +611,18 @@
     }
 
     async function iniciar() {
-      if (!codigo) {
-        mostrarErro("Faltou o código do sorteio no link.");
-        return;
-      }
+      $("hint").textContent = "Aguardando os dados enviados pelo robô.";
+
+      await new Promise(resolve => setTimeout(resolve, 2600));
+
+      if (recebeuDadosDireto) return;
 
       try {
+        if (!codigo) {
+          mostrarErro("Faltou o código do sorteio no link.");
+          return;
+        }
+
         const resposta = await jsonp({ api: "sorteio", s: codigo });
 
         if (!resposta || !resposta.ok || !resposta.sorteio) {
@@ -602,29 +630,21 @@
           return;
         }
 
-        const sorteio = resposta.sorteio;
-        participantes = Array.isArray(sorteio.participantes) ? sorteio.participantes : [];
-        resultado = sorteio.resultado || null;
-
-        $("subtitle").textContent = (sorteio.profissionais || []).join(", ") || "Clientes do mês";
-        $("periodo").textContent = (sorteio.inicioBr || "") + " até " + (sorteio.fimBr || "");
-        $("total").textContent = String(participantes.length);
-        $("regra").textContent = sorteio.regra || "-";
-        renderizarLista();
-
-        if (resultado) {
-          mostrarVencedora(resultado, true);
-          return;
-        }
-
-        $("winner").textContent = "Clique em sortear para escolher a ganhadora.";
-        $("hint").textContent = "Os nomes vão girar antes do resultado final.";
-        $("countdown").textContent = "Pronto";
-        $("sortear").disabled = !participantes.length;
+        aplicarSorteio(resposta.sorteio);
       } catch (e) {
         mostrarErro(e.message || "Falha ao conectar com o Google.");
       }
     }
+
+    window.addEventListener("message", event => {
+      const mensagem = event.data || {};
+
+      if (mensagem.tipo !== "studioQueensSorteio" || !mensagem.dados) return;
+      if (codigo && mensagem.codigo && mensagem.codigo !== codigo) return;
+
+      recebeuDadosDireto = true;
+      aplicarSorteio(mensagem.dados);
+    });
 
     $("sortear").addEventListener("click", sortearCliente);
     iniciar();
