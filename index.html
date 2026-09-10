@@ -553,14 +553,14 @@
         .replace(/'/g, "&#039;");
     }
 
-    function jsonp(extraParams) {
+    function jsonp(extraParams, tempoLimiteMs) {
       return new Promise((resolve, reject) => {
         const callback = "sq_cb_" + Date.now() + "_" + Math.random().toString(36).slice(2);
         const script = document.createElement("script");
         const timeout = setTimeout(() => {
           cleanup();
           reject(new Error("Tempo esgotado ao conectar com o Google."));
-        }, 18000);
+        }, tempoLimiteMs || 45000);
 
         function cleanup() {
           clearTimeout(timeout);
@@ -576,6 +576,7 @@
         const url = new URL(CONFIG.apiUrl);
         Object.entries(extraParams).forEach(([chave, valor]) => url.searchParams.set(chave, valor));
         url.searchParams.set("callback", callback);
+        url.searchParams.set("_", Date.now().toString());
         script.onerror = () => {
           cleanup();
           reject(new Error("Falha ao carregar dados do Google."));
@@ -587,8 +588,32 @@
 
     function mostrarErro(texto) {
       $("winner").textContent = texto;
-      $("hint").textContent = "Gere um novo sorteio pelo robô se precisar.";
+      $("hint").textContent = "Atualize a página. Se continuar, gere um novo link pelo robô.";
+      $("countdown").textContent = "Erro";
+      $("sortear").textContent = "Sem dados";
+      $("sortear").disabled = true;
       $("lista").innerHTML = '<div class="state">' + esc(texto) + '</div>';
+    }
+
+    function esperar(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    async function buscarSorteioGoogleComTentativas() {
+      let ultimoErro = null;
+
+      for (let tentativa = 1; tentativa <= 3; tentativa++) {
+        try {
+          $("hint").textContent = "Conectando com o Google. Tentativa " + tentativa + " de 3.";
+          return await jsonp({ api: "sorteio", s: codigo }, 45000);
+        } catch (e) {
+          ultimoErro = e;
+          $("hint").textContent = "O Google demorou para responder. Tentando novamente...";
+          await esperar(1800);
+        }
+      }
+
+      throw ultimoErro || new Error("Falha ao conectar com o Google.");
     }
 
     function salvarResultadoLocal(cliente) {
@@ -721,9 +746,23 @@
       $("countdown").textContent = "OK";
       $("sortear").textContent = participantesDisponiveis().length ? "Sortear novamente" : "Sem clientes válidas";
       $("sortear").disabled = !participantesDisponiveis().length;
+
+      salvarResultado({
+        ...cliente,
+        tipoResultado: "procedimento_invalido"
+      }).catch(() => {
+        $("hint").textContent = "Procedimento inválido. Não consegui registrar no Google, mas você pode sortear novamente.";
+      });
     }
 
     function mostrarVencedora(cliente, jaSorteado) {
+      if (!cliente.tipoResultado) {
+        cliente = {
+          ...cliente,
+          tipoResultado: "ganhadora"
+        };
+      }
+
       resultado = cliente;
       sorteioEmAndamento = false;
       salvarResultadoLocal(cliente);
@@ -833,7 +872,7 @@
           return;
         }
 
-        const resposta = await jsonp({ api: "sorteio", s: codigo });
+        const resposta = await buscarSorteioGoogleComTentativas();
 
         if (!resposta || !resposta.ok || !resposta.sorteio) {
           mostrarErro(resposta && resposta.erro ? resposta.erro : "Não consegui abrir este sorteio.");
