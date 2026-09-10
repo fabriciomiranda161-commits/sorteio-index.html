@@ -304,6 +304,21 @@
 
     .client {
       padding: 16px;
+      transition: border-color .22s ease, box-shadow .22s ease, transform .22s ease, background .22s ease;
+    }
+
+    .client.winnerCard {
+      border-color: rgba(241, 208, 140, .92);
+      background:
+        linear-gradient(135deg, rgba(241, 208, 140, .20), rgba(255, 250, 242, .08)),
+        rgba(255, 250, 242, .08);
+      box-shadow: 0 0 0 1px rgba(241, 208, 140, .24), 0 24px 58px rgba(0, 0, 0, .42);
+      transform: translateY(-2px);
+    }
+
+    .client.winnerCard .badge {
+      background: linear-gradient(135deg, #fff1be, #f1c15f);
+      box-shadow: 0 0 0 5px rgba(241, 208, 140, .12);
     }
 
     .clientTop {
@@ -346,6 +361,10 @@
     }
 
     .row.procedure {
+      grid-column: 1 / -1;
+    }
+
+    .row.full {
       grid-column: 1 / -1;
     }
 
@@ -514,6 +533,7 @@
 
     const params = new URLSearchParams(location.search);
     const codigo = (params.get("s") || "").trim();
+    const chaveResultadoLocal = codigo ? "studioQueensResultadoSorteio:" + codigo : "";
     let participantes = [];
     let resultado = null;
     let recebeuDadosDireto = false;
@@ -569,11 +589,30 @@
       $("lista").innerHTML = '<div class="state">' + esc(texto) + '</div>';
     }
 
+    function salvarResultadoLocal(cliente) {
+      if (!chaveResultadoLocal || !cliente) return;
+
+      try {
+        localStorage.setItem(chaveResultadoLocal, JSON.stringify(cliente));
+      } catch (e) {
+      }
+    }
+
+    function buscarResultadoLocal() {
+      if (!chaveResultadoLocal) return null;
+
+      try {
+        return JSON.parse(localStorage.getItem(chaveResultadoLocal) || "null");
+      } catch (e) {
+        return null;
+      }
+    }
+
     function aplicarSorteio(sorteio) {
       if (sorteioEmAndamento || resultado) return;
 
       participantes = Array.isArray(sorteio.participantes) ? sorteio.participantes : [];
-      resultado = sorteio.resultado || null;
+      resultado = buscarResultadoLocal() || sorteio.resultado || null;
       sorteioCarregado = true;
       $("whatsapp").hidden = true;
 
@@ -585,6 +624,7 @@
 
       if (resultado) {
         mostrarVencedora(resultado, true);
+        destacarCardGanhadora(resultado);
         return;
       }
 
@@ -604,20 +644,22 @@
       $("lista").innerHTML = participantes.map((cliente, indice) => {
         const procedimento = cliente.procedimento || "Procedimento agendado";
         const invalido = Boolean(cliente.procedimentoInvalido);
+        const posicao = indice + 1;
 
-        return '<article class="client">' +
+        return '<article class="client" data-posicao="' + posicao + '" data-chave="' + esc(chaveCliente(cliente)) + '">' +
           '<div class="clientTop">' +
-          '<div class="badge">' + String(indice + 1).padStart(2, "0") + '</div>' +
+          '<div class="badge">' + String(posicao).padStart(2, "0") + '</div>' +
           '<div><h2>' + esc(cliente.nome || "Sem nome") + '</h2><p>' + esc(cliente.profissional || "Studio Queens") + '</p></div>' +
           '</div>' +
           '<div class="info">' +
           '<div class="row"><span>Atendimento</span><strong>' + esc(cliente.dataBr || "-") + '</strong></div>' +
-          '<div class="row"><span>Telefone</span><strong>' + esc(cliente.telefoneFinal || "-") + '</strong></div>' +
           '<div class="row procedure' + (invalido ? " invalidProcedure" : "") + '"><span>Procedimento</span><strong>' + esc(procedimento) + '</strong></div>' +
           '</div>' +
           (invalido ? '<div class="tag">Procedimento inválido para campanha</div>' : '') +
           '</article>';
       }).join("");
+
+      if (resultado) destacarCardGanhadora(resultado);
     }
 
     function linkWhatsApp(cliente) {
@@ -625,16 +667,53 @@
       return telefone ? "https://wa.me/" + telefone : "#";
     }
 
+    function chaveCliente(cliente) {
+      return [
+        cliente && cliente.idCliente || "",
+        cliente && cliente.telefoneFinal || "",
+        cliente && cliente.nome || "",
+        cliente && cliente.dataApi || cliente && cliente.dataBr || "",
+        cliente && cliente.hora || ""
+      ].join("|");
+    }
+
+    function posicaoCliente(cliente) {
+      const chave = chaveCliente(cliente);
+      const indice = participantes.findIndex(item => chaveCliente(item) === chave);
+      return indice >= 0 ? indice + 1 : null;
+    }
+
+    function destacarCardGanhadora(cliente) {
+      const posicao = posicaoCliente(cliente);
+
+      document.querySelectorAll(".client.winnerCard").forEach(card => {
+        card.classList.remove("winnerCard");
+      });
+
+      if (!posicao) return;
+
+      const card = document.querySelector('.client[data-posicao="' + posicao + '"]');
+      if (!card) return;
+
+      card.classList.add("winnerCard");
+      setTimeout(() => {
+        card.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 650);
+    }
+
     function mostrarVencedora(cliente, jaSorteado) {
       resultado = cliente;
       sorteioEmAndamento = false;
+      salvarResultadoLocal(cliente);
+      const posicao = posicaoCliente(cliente);
       $("winner").className = "winner final";
       $("winner").innerHTML = "Ganhadora: " + esc(cliente.nome || "Sem nome") +
-        "<br><small>" + esc(cliente.profissional || "Studio Queens") + "</small>";
+        "<br><small>" + (posicao ? "Nº " + String(posicao).padStart(2, "0") + " da lista - " : "") + esc(cliente.profissional || "Studio Queens") + "</small>";
       $("hint").textContent = jaSorteado ? "Este sorteio já tinha uma ganhadora salva." : "Resultado salvo.";
       $("countdown").textContent = "OK";
       $("sortear").textContent = "Sorteado";
       $("sortear").disabled = true;
+      destacarCardGanhadora(cliente);
 
       if (cliente.telefoneFinal) {
         $("whatsapp").href = linkWhatsApp(cliente);
