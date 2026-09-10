@@ -292,6 +292,10 @@
       box-shadow: 0 14px 28px rgba(0, 0, 0, .22);
     }
 
+    .linkBtn[hidden] {
+      display: none;
+    }
+
     .list {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -339,6 +343,30 @@
       grid-template-columns: 1fr 1fr;
       gap: 8px;
       margin-top: 14px;
+    }
+
+    .row.procedure {
+      grid-column: 1 / -1;
+    }
+
+    .row.invalidProcedure {
+      border-color: rgba(241, 110, 110, .40);
+      background: rgba(160, 45, 55, .18);
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      width: fit-content;
+      min-height: 26px;
+      margin-top: 10px;
+      padding: 5px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(241, 110, 110, .44);
+      background: rgba(160, 45, 55, .22);
+      color: #ffd9d9;
+      font-size: 12px;
+      font-weight: 900;
     }
 
     .row {
@@ -470,7 +498,7 @@
         <div class="winner" id="winner">Buscando participantes.</div>
         <p class="hint" id="hint">Aguarde um instante.</p>
         <div class="actions">
-          <button class="btn" id="sortear" type="button" disabled>Sortear cliente</button>
+          <button class="btn" id="sortear" type="button" disabled>Sortear</button>
           <a class="linkBtn" id="whatsapp" href="#" target="_blank" rel="noopener" hidden>Chamar ganhadora</a>
         </div>
       </div>
@@ -542,6 +570,7 @@
     function aplicarSorteio(sorteio) {
       participantes = Array.isArray(sorteio.participantes) ? sorteio.participantes : [];
       resultado = sorteio.resultado || null;
+      $("whatsapp").hidden = true;
 
       $("subtitle").textContent = (sorteio.profissionais || []).join(", ") || "Clientes do mês";
       $("periodo").textContent = (sorteio.inicioBr || "") + " até " + (sorteio.fimBr || "");
@@ -557,6 +586,7 @@
       $("winner").textContent = "Clique em sortear para escolher a ganhadora.";
       $("hint").textContent = "Os nomes vão girar antes do resultado final.";
       $("countdown").textContent = "Pronto";
+      $("sortear").textContent = "Sortear";
       $("sortear").disabled = !participantes.length;
     }
 
@@ -567,6 +597,9 @@
       }
 
       $("lista").innerHTML = participantes.map((cliente, indice) => {
+        const procedimento = cliente.procedimento || "Procedimento agendado";
+        const invalido = Boolean(cliente.procedimentoInvalido);
+
         return '<article class="client">' +
           '<div class="clientTop">' +
           '<div class="badge">' + String(indice + 1).padStart(2, "0") + '</div>' +
@@ -575,7 +608,9 @@
           '<div class="info">' +
           '<div class="row"><span>Atendimento</span><strong>' + esc(cliente.dataBr || "-") + '</strong></div>' +
           '<div class="row"><span>Telefone</span><strong>' + esc(cliente.telefoneFinal || "-") + '</strong></div>' +
+          '<div class="row procedure' + (invalido ? " invalidProcedure" : "") + '"><span>Procedimento</span><strong>' + esc(procedimento) + '</strong></div>' +
           '</div>' +
+          (invalido ? '<div class="tag">Procedimento inválido para campanha</div>' : '') +
           '</article>';
       }).join("");
     }
@@ -589,10 +624,10 @@
       resultado = cliente;
       $("winner").className = "winner final";
       $("winner").innerHTML = "Ganhadora: " + esc(cliente.nome || "Sem nome") +
-        "<br><small>" + esc(cliente.telefoneFinal || "Sem telefone") + " - " + esc(cliente.profissional || "") + "</small>";
+        "<br><small>" + esc(cliente.profissional || "Studio Queens") + "</small>";
       $("hint").textContent = jaSorteado ? "Este sorteio já tinha uma ganhadora salva." : "Resultado salvo.";
       $("countdown").textContent = "OK";
-      $("sortear").textContent = jaSorteado ? "Já sorteado" : "Sorteado";
+      $("sortear").textContent = "Sorteado";
       $("sortear").disabled = true;
 
       if (cliente.telefoneFinal) {
@@ -629,6 +664,7 @@
 
       $("sortear").disabled = true;
       $("sortear").textContent = "Sorteando...";
+      $("whatsapp").hidden = true;
       $("hint").textContent = "Boa sorte!";
 
       let contador = 3;
