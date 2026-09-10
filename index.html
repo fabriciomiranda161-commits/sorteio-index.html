@@ -517,6 +517,8 @@
     let participantes = [];
     let resultado = null;
     let recebeuDadosDireto = false;
+    let sorteioCarregado = false;
+    let sorteioEmAndamento = false;
 
     const $ = id => document.getElementById(id);
 
@@ -568,8 +570,11 @@
     }
 
     function aplicarSorteio(sorteio) {
+      if (sorteioEmAndamento || resultado) return;
+
       participantes = Array.isArray(sorteio.participantes) ? sorteio.participantes : [];
       resultado = sorteio.resultado || null;
+      sorteioCarregado = true;
       $("whatsapp").hidden = true;
 
       $("subtitle").textContent = (sorteio.profissionais || []).join(", ") || "Clientes do mês";
@@ -622,6 +627,7 @@
 
     function mostrarVencedora(cliente, jaSorteado) {
       resultado = cliente;
+      sorteioEmAndamento = false;
       $("winner").className = "winner final";
       $("winner").innerHTML = "Ganhadora: " + esc(cliente.nome || "Sem nome") +
         "<br><small>" + esc(cliente.profissional || "Studio Queens") + "</small>";
@@ -660,8 +666,9 @@
     }
 
     function sortearCliente() {
-      if (!participantes.length || resultado) return;
+      if (!participantes.length || resultado || sorteioEmAndamento) return;
 
+      sorteioEmAndamento = true;
       $("sortear").disabled = true;
       $("sortear").textContent = "Sorteando...";
       $("whatsapp").hidden = true;
@@ -691,7 +698,7 @@
       $("winner").className = "winner sorting";
       $("countdown").textContent = "...";
 
-      const giro = setInterval(async () => {
+      const giro = setInterval(() => {
         passos++;
         const atual = participantes[Math.floor(Math.random() * participantes.length)];
         $("winner").textContent = atual.nome || "Participante";
@@ -701,11 +708,9 @@
           mostrarVencedora(vencedora, false);
           confete();
 
-          try {
-            await salvarResultado(vencedora);
-          } catch (e) {
+          salvarResultado(vencedora).catch(() => {
             $("hint").textContent = "A ganhadora apareceu, mas não consegui salvar no Google. Anote o nome antes de fechar.";
-          }
+          });
         }
       }, 90);
     }
@@ -741,6 +746,7 @@
 
       if (mensagem.tipo !== "studioQueensSorteio" || !mensagem.dados) return;
       if (codigo && mensagem.codigo && mensagem.codigo !== codigo) return;
+      if (sorteioCarregado || sorteioEmAndamento || resultado) return;
 
       recebeuDadosDireto = true;
       aplicarSorteio(mensagem.dados);
